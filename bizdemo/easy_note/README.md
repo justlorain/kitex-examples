@@ -1,5 +1,5 @@
 # Easy Note
-
+English | [中文](./README_CN.md)
 ## Introduction
 
 Add a demo for `kitex` which implements a simple note service,the demo is divided into three main sections.
@@ -139,172 +139,108 @@ authMiddleware, _ := jwt.New(&jwt.HertzJWTMiddleware{
 })
 ```
 
+## Deploy with docker
+
+### 1.Setup Basic Dependence
+```shell
+docker-compose up
+```
+
+### 2.Get Default Network Gateway Ip
+``docker-compose up`` will create a default bridge network for mysql,etcd and jaeger.
+Get the gateway ip of this default network to reach three components.
+```shell
+docker inspect easy_note_default
+```
+<img src="images/network.png" width="2850"  alt=""/>
+
+### 3.Replace ip in Dockerfile
+You can use gateway ip in ``step 2`` to replace MysqlIp , EtcdIp and JAEGER_AGENT_HOST.
+
+* UserDockerfile:
+  ```dockerfile
+  FROM golang:1.17.2
+  ENV GO111MODULE=on
+  ENV GOPROXY="https://goproxy.io"
+  ENV MysqlIp="your MysqlIp"
+  ENV EtcdIp="your EtcdIp"
+  ENV JAEGER_AGENT_HOST="your JAEGER_AGENT_HOST"
+  ENV JAEGER_DISABLED=false
+  ENV JAEGER_SAMPLER_TYPE="const"
+  ENV JAEGER_SAMPLER_PARAM=1
+  ENV JAEGER_REPORTER_LOG_SPANS=true
+  ENV JAEGER_AGENT_PORT=6831
+  WORKDIR $GOPATH/src/easy_note
+  COPY . $GOPATH/src/easy_note
+  WORKDIR $GOPATH/src/easy_note/cmd/user
+  RUN ["sh", "build.sh"]
+  EXPOSE 8889
+  ENTRYPOINT ["./output/bin/demouser"]
+  ```
+
+* NoteDockerfile:
+  ```dockerfile
+  FROM golang:1.17.2
+  ENV GO111MODULE=on
+  ENV GOPROXY="https://goproxy.io"
+  ENV MysqlIp="your MysqlIp"
+  ENV EtcdIp="your EtcdIp"
+  ENV JAEGER_AGENT_HOST="your JAEGER_AGENT_HOST"
+  ENV JAEGER_DISABLED=false
+  ENV JAEGER_SAMPLER_TYPE="const"
+  ENV JAEGER_SAMPLER_PARAM=1
+  ENV JAEGER_REPORTER_LOG_SPANS=true
+  ENV JAEGER_AGENT_PORT=6831
+  WORKDIR $GOPATH/src/easy_note
+  COPY . $GOPATH/src/easy_note
+  WORKDIR $GOPATH/src/easy_note/cmd/note
+  RUN ["sh", "build.sh"]
+  EXPOSE 8888
+  ENTRYPOINT ["./output/bin/demonote"]
+  ```
+
+* ApiDockerfile:
+  ```dockerfile
+  FROM golang:1.17.2
+  ENV GO111MODULE=on
+  ENV GOPROXY="https://goproxy.io"
+  ENV MysqlIp="your MysqlIp"
+  ENV EtcdIp="your EtcdIp"
+  ENV JAEGER_AGENT_HOST="your JAEGER_AGENT_HOST"
+  ENV JAEGER_DISABLED=false
+  ENV JAEGER_SAMPLER_TYPE="const"
+  ENV JAEGER_SAMPLER_PARAM=1
+  ENV JAEGER_REPORTER_LOG_SPANS=true
+  ENV JAEGER_AGENT_PORT=6831
+  WORKDIR $GOPATH/src/easy_note
+  COPY . $GOPATH/src/easy_note
+  WORKDIR $GOPATH/src/easy_note/cmd/api
+  RUN go build -o main .
+  EXPOSE 8080
+  ENTRYPOINT ["./main"]
+  ```
+
+### 4.Build images from Dockerfile
+```shell
+docker build -t easy_note/user -f UserDockerfile .
+docker build -t easy_note/note -f NoteDockerfile .
+docker build -t easy_note/api -f ApiDockerfile .
+```
+
+### 5.Run containers
+* Run containers in ``easy_note_default`` network with the subnet inspected in the Step 2.
+  ```shell
+  docker run -d --name user --network easy_note_default easy_note/user
+  docker run -d --name note --network easy_note_default easy_note/note
+  docker run -d -p 8080:8080 --name api --network easy_note_default easy_note/api
+  ```
 ## API requests
 
-The following is a list of API requests and partial responses.
+[API requests](api.md)
 
-### Register
 
-```shell
-curl --location --request POST '127.0.0.1:8080/v1/user/register' \
---header 'Content-Type: application/json' \
---data-raw '{
-    "username":"kinggo",
-    "password":"123456"
-}'
-```
+## Faq
 
-#### response
-```javascript
-// successful
-{
-    "code": 0,
-    "message": "Success",
-    "data": null
-}
-// failed
-{
-    "code": 10003,
-    "message": "User already exists",
-    "data": null
-}
-```
+### How to upgrade kitex_gen
 
-### Login
-
-#### will return jwt token
-```shell
-curl --location --request POST '127.0.0.1:8080/v1/user/login' \
---header 'Content-Type: application/json' \
---data-raw '{
-    "username":"kinggo",
-    "password":"123456"
-}'
-```
-
-#### response
-```javascript
-// successful
-{
-    "code": 0,
-    "expire": "2022-01-19T01:56:46+08:00",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NDI1Mjg2MDYsImlkIjoxLCJvcmlnX2lhdCI6MTY0MjUyNTAwNn0.k7Ah9G4Enap9YiDP_rKr5HSzF-fc3cIxwMZAGeOySqU"
-}
-// failed
-{
-    "code": 10004,
-    "message": "Authorization failed",
-    "data": null
-}
-```
-
-### Create Note
-```shell
-curl --location --request POST '127.0.0.1:8080/v1/note' \
---header 'Authorization: Bearer $token' \
---header 'Content-Type: application/json' \
---data-raw '{
-    "title":"test title",
-    "content":"test content"
-}'
-```
-
-#### response
-```javascript
-// successful
-{
-    "code": 0,
-    "message": "Success",
-    "data": null
-}
-// failed
-{
-    "code": 10002,
-    "message": "Wrong Parameter has been given",
-    "data": null
-}
-```
-
-### Query Note
-```shell
-curl --location --request GET '127.0.0.1:8080/v1/note/query?offset=0&limit=20&search_keyword=test' \
---header 'Authorization: Bearer $token'
-```
-
-#### response
-```javascript
-// successul
-{
-    "code": 0,
-    "message": "Success",
-    "data": {
-        "notes": [
-            {
-                "note_id": 1,
-                "user_id": 1,
-                "user_name": "kinggo",
-                "user_avatar": "test",
-                "title": "test title",
-                "content": "test content",
-                "create_time": 1642525063
-            }
-        ],
-        "total": 1
-    }
-}
-// failed
-{
-    "code":10002,
-    "message":"Wrong Parameter has been given",
-    "data":null
-}
-```
-
-### Update Note
-```shell
-curl --location --request PUT '127.0.0.1:8080/v1/note/$note_id' \
---header 'Authorization: Bearer $token' \
---header 'Content-Type: application/json' \
---data-raw '{
-    "title":"test",
-    "content":"test"
-}'
-```
-
-#### response
-```javascript
-// successful
-{
-    "code": 0,
-    "message": "Success",
-    "data": null
-}
-// failed
-{
-    "code":10001,
-    "message":"strconv.ParseInt: parsing \"$note_id\": invalid syntax",
-    "data":null
-}
-```
-
-### Delete Note
-```shell
-curl --location --request DELETE '127.0.0.1:8080/v1/note/$note_id' \
---header 'Authorization: Bearer $token'
-```
-
-#### response
-```javascript
-// successful
-{
-    "code": 0,
-    "message": "Success",
-    "data": null
-}
-// failed
-{
-    "code":10001,
-    "message":"strconv.ParseInt: parsing \"$note_id\": invalid syntax",
-    "data":null
-}
-```
+- refer to [Makefile](Makefile)
